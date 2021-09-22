@@ -60,7 +60,6 @@
                       ))})
 
 (defn execute-redis-request-reducible [origin-result respond query]
-  (log/info "tomap: " (to-map origin-result))
   (let [result        (to-map origin-result)
         rows-path     (or (:path (:result query)) "$")
         rows          (body->rows (json-path rows-path result))
