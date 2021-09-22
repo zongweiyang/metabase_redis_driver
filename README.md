@@ -11,6 +11,8 @@ All you need you do is drop the driver in your `plugins/` directory. You can gra
 Clone the [Metabase repo](https://github.com/metabase/metabase) first if you haven't already done so.
 
 ```bash
+# tag v1.40.5
+git checkout v1.40.5 
 cd /path/to/metabase_source
 lein install-for-building-drivers
 ```
