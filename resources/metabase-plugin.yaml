@@ -10,9 +10,9 @@ driver:
   connection-properties:
     - host
     - port
-    - name: username
-      display-name: Username
-      required: false
+#    - name: username
+#      display-name: Username
+#      required: false
     - name: password
       display-name: Password
       required: false

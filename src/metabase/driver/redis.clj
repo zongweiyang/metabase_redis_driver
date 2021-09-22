@@ -13,15 +13,19 @@
 
 (defn- get-connection-url
   [{:keys [host port username password database_id] :as details}]
-  (str "redis://" (when username (str username ":" password "@")) host ":" port "/" database_id))
+  (str "redis://" password "@" host ":" port "/" database_id))
 
 
 (defmethod driver/supports? [:redis :basic-aggregations] [_ _] false)
 
 (defmethod driver/can-connect? :redis
   [driver detail]
-  (println (get-connection-url detail))
-  (def server1-conn {:pool {} :spec {:uri (get-connection-url detail)}})
+  (def server1-conn {:pool {} :spec {:host (:host detail)
+                                     :port (Integer/valueOf (:port detail))
+                                     ;:ssl-fn :default ; [1]
+                                     :password (:password detail)
+                                     ;:timeout-ms 6000
+                                     :db (Integer/valueOf (:database_id detail))}})
   (= (wcar* (car/ping) "PONG")))
 
 (defmethod driver/describe-database :redis
