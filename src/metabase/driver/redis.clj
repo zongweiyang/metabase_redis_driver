@@ -80,6 +80,7 @@
     (case cmd
       "ping" (vector (wcar* (car/ping)))
       "get" (vector (wcar* (car/get k)))
+      "type" (vector (wcar* (car/type k)))
       "hget" (vector (wcar* (car/hget k (get mydata 2))))
       "hgetall" (wcar* (car/hgetall k))
       "keys" (wcar* (car/keys (get mydata 1)))
