@@ -1,10 +1,11 @@
 (ns metabase.driver.redis
   (:require [metabase.driver :as driver]
+            [metabase.query-processor.context :as context]
             [metabase.query-processor.store :as qp.store]
             [metabase.driver.redis.query-processor :as redis.qp]
             [metabase.query-processor.reducible :as qp.reducible]
             [taoensso.carmine :as car
-             :refer               (wcar)]))
+             :refer (wcar)]))
 
 (driver/register! :redis)
 
@@ -12,7 +13,7 @@
 
 (defn- get-connection-url
   [{:keys [host port username password database_id] :as details}]
-  (str "redis://" (when username (str username ":" password "@")) host ":" port "/"))
+  (str "redis://" (when username (str username ":" password "@")) host ":" port "/" database_id))
 
 
 (defmethod driver/supports? [:redis :basic-aggregations] [_ _] false)
@@ -62,22 +63,53 @@
 ;  ({:rows    (partition 2 (range 20))
 ;    :columns (for [i (range 1 3)]
 ;               (format "col_%d" i))}))
+(defn split-query
+  [query]
+  (clojure.string/split (clojure.string/replace query #"( )+" " ") #" "))
+
+(def tkey (partial car/key))
+
+(defn run-cmd
+  [cmd mydata]
+  (println "cmd: " cmd " data: " mydata)
+  (let [k (tkey (get mydata 1))]
+    (case cmd
+      "ping" (vector (wcar* (car/ping)))
+      "get" (vector (wcar* (car/get k)))
+      "hget" (vector (wcar* (car/hget k (get mydata 2))))
+      "hgetall" (wcar* (car/hgetall k))
+      "keys" (wcar* (car/keys (get mydata 1)))
+      "llen" (wcar* (car/llen k))
+      "lrange" (wcar* (car/lrange k (get mydata 2) (get mydata 3)))
+      "zrange" (wcar* (car/zrange k (get mydata 2) (get mydata 3)))
+      "zrank" (wcar* (car/zrank k (get mydata 2)))
+      "smembers" (wcar* (car/smembers k))
+      "COMMAND not support")))
+
+(defn do-run-cmd
+  "do run "
+  [queryarray]
+  (println "do-run-cmd: " queryarray)
+  (run-cmd (first queryarray) queryarray))
+
 
 (defn run-query!
   [query]
-  (println "qqqqqqqqqqqqqqqqqq" query))
+  (println "query: " query)
+  (do-run-cmd (split-query query)))
 
 (defn get-row
   [results]
   (println "rrrrrrrrrrrrrrrrrrrrrrr" results)
-  [["aaaaa" "sssssss"]])
+  [[results]])
 
 (defmethod driver/execute-reducible-query :redis
-  [_ query chans return-results]
-  (with-open [results (run-query! query)]
-    (return-results
-     {:cols [{:name "key"} {:name "value"}]}
-     ([["aaaa", "bbbb"]]))))
+  [_ query context return-results]
+  (with-open [results (run-query! (:query (:native query)))]
+    (println results)
+    (redis.qp/execute-redis-request-reducible results return-results {:result {:path "$.result"}})))
+
+
 ;
 ;(defn execute-reducible-query
 ;  "Execute a `query` using the provided `do-query` function, and return the results in the usual format."
@@ -91,7 +123,9 @@
 ;     (for [row (.getRows response)]
 ;       (for [[data getter] (map vector row getters)]
 ;         (getter data))))))
-;
+;(return-results
+;      {:cols [{:name "value"}]}
+;      (qp.reducible/reducible-rows (get-row results) (context/canceled-chan context)))))
 ;
 ;(defmethod driver/execute-reducible-query :googleanalytics
 ;  [_ query _ respond]

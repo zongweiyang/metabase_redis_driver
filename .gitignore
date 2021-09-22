@@ -3,5 +3,7 @@
 /target
 /.nrepl-port
 /.idea*
+*.iml
+metabase
 .lein-repl-history
 

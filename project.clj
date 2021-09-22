@@ -5,6 +5,7 @@
   [[org.clojure/core.logic "0.8.11"
     :exclusions
     [org.clojure/clojure]]
+   [json-path/json-path "2.1.0"]
    [com.taoensso/carmine "2.19.1"]]
 
   :jvm-opts

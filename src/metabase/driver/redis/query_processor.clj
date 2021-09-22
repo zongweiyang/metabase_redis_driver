@@ -1,65 +1,82 @@
 (ns metabase.driver.redis.query-processor
   (:refer-clojure :exclude [==])
-  (:require [clojure.core.logic :refer :all]
-            [clojure.core.logic.fd :as fd]))
+  (:require [cheshire.core :as json]
+            [clojure.tools.logging :as log]
+            [json-path :as json-path]))
 
-(defn- solve-board [hints & {:keys [max-solutions], :or {max-solutions 1}}]
-  (let [vars       (vec (repeatedly 81 lvar))
-        rows       (mapv vec (partition 9 vars))
-        cols       (apply map vector rows)
-        squares    (for [corner-x (range 0 9 3)
-                         corner-y (range 0 9 3)]
-                     (for [x (range corner-x (+ corner-x 3))
-                           y (range corner-y (+ corner-y 3))]
-                       (get-in rows [x y])))]
-    (run max-solutions [q]
-      (== q vars)
-      (everyg #(fd/in % (fd/domain 1 2 3 4 5 6 7 8 9)) vars)
-      (everyg #(if (zero? (hints %)) succeed
-                   (== (vars %) (hints %)))
-              (range 0 81))
-      (everyg fd/distinct rows)
-      (everyg fd/distinct cols)
-      (everyg fd/distinct squares))))
+(declare compile-expression compile-function)
 
-(defn- rando-solved-board []
-  (or (first (solve-board
-              ;; stick 10 rand digits in a grid & try to solve
-              (loop [[position & more] (take 10 (shuffle (range 0 81))), board (vec (repeat 81 0))]
-                (if-not position
-                  board
-                  (recur more (assoc board position (inc (rand-int 9))))))))
-      ;; if unsolvable try again
-      (recur)))
+(defn json-path
+  [query body]
+  (json-path/at-path query body))
 
- (defn- rando-board [difficulty]
-   (let [num-holes        (- 81 ({:easy 48, :medium 36, :hard 24} (keyword difficulty)))
-         solved-board     (vec (rando-solved-board))
-         holes-seq        (shuffle (range 0 81))
-         unique-solution? #(= 1 (count (solve-board % :max-solutions 2)))]
-     (loop [[hole & more] holes-seq, remaining-holes num-holes, board solved-board]
-       (cond
-         (zero? remaining-holes)
-         board
+(defn compile-function
+  [[operator & arguments]]
+  (case (keyword operator)
+    :count count
+    :sum   #(reduce + (map (compile-expression (first arguments)) %))
+    :float #(Float/parseFloat ((compile-expression (first arguments)) %))
+    (throw (Exception. (str "Unknown operator: " operator)))))
 
-         ;; if we run out of possible holes to dig start over with shuffled sequence of hole positions
-         (not hole)
-         (recur (shuffle holes-seq) num-holes solved-board)
+(defn compile-expression
+  [expr]
+  (log/info "compile-expression" expr)
+  (cond
+    (keyword? expr) (partial json-path (str "$." (str (symbol expr))))
+    (string? expr)  (partial json-path expr)
+    (number? expr)  (constantly expr)
+    (vector? expr)  (compile-function expr)
+    :else           (throw (Exception. (str "Unknown expression: " expr)))))
 
-         :else
-         (let [new-board (assoc board hole 0)]
-           ;; try digging a hole
-           (if (unique-solution? new-board)
-             ;; if board is still solvable, recurse with new board state
-             (recur more (dec remaining-holes) new-board)
-             ;; otherwise throw out the bad hole position and recurse
-             (recur more remaining-holes board)))))))
+(defn aggregate
+  [rows metrics breakouts]
+  (let [breakouts-fns (map compile-expression breakouts)
+        breakout-fn   (fn [row] (for [breakout breakouts-fns] (breakout row)))
+        metrics-fns   (map compile-expression metrics)]
+    (log/info breakout-fn)
+    (for [[breakout-key breakout-rows] (group-by breakout-fn rows)]
+      (concat breakout-key (for [metrics-fn metrics-fns]
+                             (metrics-fn breakout-rows))))))
 
-(defn rando-board-query-results [difficulty]
-  {:rows    (for [row (partition 9 (rando-board difficulty))]
-              ;; replace the zeroes in the board with nils
-              (for [cell row]
-                (when-not (zero? cell)
-                  cell)))
-   :columns (for [i (range 1 10)]
-              (format "col_%d" i))})
+(defn extract-fields
+  [rows fields]
+  (let [fields-fns (map compile-expression fields)]
+    (for [row rows]
+      (for [field-fn fields-fns]
+        (field-fn row)))))
+
+(defn add-column-metadata
+  [fields]
+  (for [field fields]
+    {:name (if (keyword? field) (name field) (str field))
+     :display_name (if (keyword? field) (name field) (str field))}))
+
+(defn body->rows [body]
+  (vec (flatten (conj [] body))))
+(defn to-map
+  [result]
+  {:result (into [] (for [x result]
+                      {:value x}
+                      ))})
+
+(defn execute-redis-request-reducible [origin-result respond query]
+  (log/info "tomap: " (to-map origin-result))
+  (let [result        (to-map origin-result)
+        rows-path     (or (:path (:result query)) "$")
+        rows          (body->rows (json-path rows-path result))
+        fields        (or (:fields (:result query)) (reduce-kv (fn [m k _] (merge m k)) [] (first rows)))
+        aggregations  (or (:aggregation (:result query)) [])
+        breakouts     (or (:breakout (:result query)) [])
+        raw           (and (= (count breakouts) 0) (= (count aggregations) 0))
+        columns_metadata (if raw (add-column-metadata fields)
+                                 (add-column-metadata (concat breakouts (get aggregations 0))))
+        extracted-fields (if raw
+                           (extract-fields rows fields)
+                           (aggregate rows aggregations breakouts))]
+    (log/info "Columns metadata: " columns_metadata)
+    (log/info "rows-path: " rows-path)
+    (log/info "rows: " rows)
+    (log/info "fields: " fields)
+
+    (respond {:cols columns_metadata } extracted-fields)))
+
