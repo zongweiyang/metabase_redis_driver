@@ -77,7 +77,7 @@
   [cmd mydata]
   (println "cmd: " cmd " data: " mydata)
   (let [k (tkey (get mydata 1))]
-    (case cmd
+    (case (clojure.string/lower-case cmd)
       "ping" (vector (wcar* (car/ping)))
       "get" (vector (wcar* (car/get k)))
       "type" (vector (wcar* (car/type k)))
