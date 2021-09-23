@@ -69,7 +69,7 @@
 ;               (format "col_%d" i))}))
 (defn split-query
   [query]
-  (clojure.string/split (clojure.string/replace query #"( )+" " ") #" "))
+  (clojure.string/split (clojure.string/trim-newline (clojure.string/replace (clojure.string/trim query) #"( )+" " "))  #" "))
 
 (def tkey (partial car/key))
 
