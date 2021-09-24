@@ -1,4 +1,4 @@
-(defproject metabase/redis-driver "1.0.0-2.19.1do"
+(defproject metabase/redis1-driver "1.0.0-2.19.1do"
   :min-lein-version "2.5.0"
 
   :dependencies
@@ -23,5 +23,5 @@
     :omit-source   true
     :javac-options ["-target" "1.8", "-source" "1.8"]
     :target-path   "target/%s"
-    :uberjar-name  "redis.metabase-driver.jar"}})
+    :uberjar-name  "redis1.metabase-driver.jar"}})
 
