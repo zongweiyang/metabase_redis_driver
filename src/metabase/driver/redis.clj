@@ -22,7 +22,7 @@
   [driver detail]
   (def server1-conn {:pool {} :spec {:host (:host detail)
                                      :port (Integer/valueOf (:port detail))
-                                     ;:ssl-fn :default ; [1]
+                                     :ssl-fn :default ; [1]
                                      :password (:password detail)
                                      ;:timeout-ms 6000
                                      :db (Integer/valueOf (:database_id detail))}})
