@@ -1,10 +1,10 @@
 # Complete list of options here: https://github.com/metabase/metabase/wiki/Metabase-Plugin-Manifest-Reference
 info:
-  name: Metabase Redis Driver
+  name: Metabase Redis1 Driver
   version: 1.0.0
-  description: Metabase Redis Driver
+  description: Metabase Redis1 Driver
 driver:
-  name: redis
+  name: redis1
   lazy-load: true
   # https://github.com/metabase/metabase/blob/master/src/metabase/driver/common.clj
   connection-properties:
@@ -22,4 +22,4 @@ driver:
 
 init:
   - step: load-namespace
-    namespace: metabase.driver.redis
+    namespace: metabase.driver.redis1
